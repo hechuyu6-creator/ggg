@@ -461,84 +461,44 @@ const App = () => {
             }
             
             if (mode === 'github' && savedAutoSync === 'true' && token) {
-                // Initial check and download with timeout protection
-                try {
-                    setGithubSyncStatus('checking');
-
-                    // Add timeout wrapper for all GitHub operations
-                    const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('网络请求超时 (10秒)')), 10000)
-                    );
-
-                    const check = await Promise.race([
-                        GithubService.validateToken(token),
-                        timeoutPromise
-                    ]) as any;
-
-                    if (!check.valid) {
-                         setGithubSyncStatus('error');
-                         setGithubSyncMsg(check.errorMsg || 'Token 无效');
-                         addLog(`GitHub 连接失败: ${check.errorMsg}`, 'error');
-                         setIsCloudInitialized(true);
-                    } else {
-                        const cloudGistId = savedGistId || await Promise.race([
-                            GithubService.findBackupGist(token),
-                            timeoutPromise
-                        ]) as any;
-
-                        if (cloudGistId) {
-                            setGistId(cloudGistId);
-                            localStorage.setItem(LS_GIST_ID, cloudGistId);
-
-                            setGithubSyncStatus('downloading');
-
-                            const cloudData = await Promise.race([
-                                GithubService.getGistContent(token, cloudGistId),
-                                timeoutPromise
-                            ]) as any;
-
-                            if (cloudData) {
-                                ignoreAutoSyncRef.current = true;
-
-                                setChats(cloudData.chats);
-                                setProfile(cloudData.profile);
-                                setTheme(cloudData.theme);
-                                setGithubSyncStatus('success');
-                                setGithubSyncMsg('已同步云端');
-                                addLog('启动时已自动从 GitHub 加载最新数据', 'success');
-                            } else {
-                                setGithubSyncStatus('error');
-                                setGithubSyncMsg('无法下载云端数据');
-                                addLog('GitHub 云端数据下载失败', 'error');
-                            }
-                        } else {
-                            setGithubSyncStatus('error');
-                            setGithubSyncMsg('未找到备份');
-                            addLog('GitHub 未找到备份文件', 'info');
-                        }
-                        setIsCloudInitialized(true);
-                    }
-                } catch (e: any) {
-                    setGithubSyncStatus('error');
-                    const errMsg = e.message || '网络错误';
-                    setGithubSyncMsg(errMsg);
-                    addLog(`GitHub 初始化失败: ${errMsg}`, 'error');
-                    setIsCloudInitialized(true);
+                // Initial check and download
+                setGithubSyncStatus('checking');
+                const check = await GithubService.validateToken(token);
+                if (!check.valid) {
+                     setGithubSyncStatus('error');
+                     setGithubSyncMsg(check.errorMsg || 'Token 无效');
+                     setIsCloudInitialized(true);
+                     return;
                 }
+                const cloudGistId = savedGistId || await GithubService.findBackupGist(token);
+                if (cloudGistId) {
+                    setGistId(cloudGistId);
+                    localStorage.setItem(LS_GIST_ID, cloudGistId);
+                    
+                    // Show downloading status explicitly
+                    setGithubSyncStatus('downloading');
+                    
+                    const cloudData = await GithubService.getGistContent(token, cloudGistId);
+                    if (cloudData) {
+                        // CRITICAL: Set ignore flag before updating state to prevent immediate auto-upload loop
+                        // This ensures startup download does NOT trigger a re-upload
+                        ignoreAutoSyncRef.current = true;
+                        
+                        setChats(cloudData.chats);
+                        setProfile(cloudData.profile);
+                        setTheme(cloudData.theme);
+                        setGithubSyncStatus('success');
+                        setGithubSyncMsg('已同步云端');
+                        addLog('启动时已自动从 GitHub 加载最新数据', 'success');
+                    }
+                }
+                setIsCloudInitialized(true);
             } 
             else if (mode === 'local' && savedAutoSync === 'true') {
                  setIsConnecting(true);
                  try {
-                     // Add timeout protection for local server
-                     const timeoutPromise = new Promise<Response>((_, reject) =>
-                         setTimeout(() => reject(new Error('本地服务器超时')), 8000)
-                     );
-
-                     const res = await Promise.race([
-                         fetch(LOCAL_SERVER_URL, { method: 'GET', mode: 'cors', cache: 'no-store' }),
-                         timeoutPromise
-                     ]);
-
+                     // Removed ?t=... 
+                     const res = await fetch(LOCAL_SERVER_URL, { method: 'GET', mode: 'cors', cache: 'no-store' });
                      if (res.ok) {
                          const serverData = await res.json();
                          if (serverData && serverData.chats) {
@@ -551,14 +511,11 @@ const App = () => {
                          setIsLocalInitialized(true);
                      } else {
                          setSyncStatus('error');
-                         setIsLocalInitialized(true);
                          addLog("无法连接本地服务器，同步暂停", "error");
                      }
-                 } catch(e: any) {
+                 } catch(e) {
                      setSyncStatus('offline');
-                     setIsLocalInitialized(true);
-                     const errMsg = e.message || '连接失败';
-                     addLog(`无法连接本地服务器: ${errMsg}`, "error");
+                     addLog("无法连接本地服务器 (可能需要信任证书)", "error");
                  } finally {
                      setIsConnecting(false);
                  }
