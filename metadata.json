@@ -1,0 +1,5 @@
+{
+  "name": "贝",
+  "description": "A WeChat-inspired AI chat interface with Tavern-style model configuration, message editing, and regeneration capabilities.",
+  "requestFramePermissions": []
+}
