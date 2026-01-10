@@ -1276,7 +1276,7 @@ const App = () => {
   };
   
   return (
-    <div className="flex h-full bg-white text-gray-900 font-sans overflow-hidden">
+    <div className="flex h-[93%] bg-white text-gray-900 font-sans overflow-hidden rounded-b-3xl border-b border-gray-300 shadow-xl">
       
       {/* SIDEBAR */}
       <div className={`flex-col h-full border-r border-gray-200 bg-[#ededed] w-full md:w-[320px] relative ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
